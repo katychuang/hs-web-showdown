@@ -30,4 +30,3 @@ main = print "hi"
 getReq = manager >>= readIORef >>= \man -> toStrict . responseBody <$> httpLbs ourRequest' man
 
 jsonStuff =  getReq  >>= \response -> return $ (fromJust (decode (fromChunks [response]) :: Maybe Value))
-
