@@ -1,56 +1,33 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import qualified Github.Search as Github
-import qualified Github.Data as Github
-import Control.Monad (forM,forM_)
-import Data.Maybe (fromMaybe)
-import Data.List (intercalate)
+import Network.HTTP.Client
+import Network.HTTP.Client.TLS
+import Control.Exception
+import Data.IORef
+import Control.Applicative   ((<$>))
+import Data.ByteString.Lazy
+import Data.ByteString
+import Data.Aeson
+import Data.Maybe
 
+manager :: IO (IORef Manager)
+manager = newManager settings >>= newIORef
+  where settings = tlsManagerSettings {
+    managerConnCount       = 100
+  , managerResponseTimeout = Just 2000000 -- 2 secs
+}
 
-yesodQuery :: String
-yesodQuery = "q=yesod"
+ourRequest' = ourRequest { requestHeaders = [("User-Agent", "katurday")] }
 
-cool = Github.searchRepos yesodQuery >>= \either -> case (either) of
-	Left e       -> error "bad"
-        Right result -> return (Github.searchReposRepos result)
+ourRequest :: Request
+ourRequest = case (parseUrl "https://api.github.com/search/code?q=addClass+in:file+language:js+repo:jquery/jquery") of
+  Just x -> x
+  Nothing -> error "bad"
 
+main = print "hi"
 
+--getReq :: IO (Either e0 Data.ByteString.ByteString)
+getReq = manager >>= readIORef >>= \man -> toStrict . responseBody <$> httpLbs ourRequest' man
 
-getRepos query = do
-  response <- Github.searchRepos query
-  case response of
-    Left e -> error "bad"
-    Right result -> 
- 
-main = do
-    let query = "q=yesod"
-    result <- Github.searchRepos query
-    case result of
-        Left e  -> putStrLn $ "Error: " ++ show e
-        Right r -> do forM_ (Github.searchReposRepos r) (\r -> do
-                        putStrLn $ formatRepo r
-                        putStrLn ""
-                        )
-                      putStrLn $ "Count: " ++ show n
-          where n = Github.searchReposTotalCount r
+jsonStuff =  getReq  >>= \response -> return $ (fromJust (decode (fromChunks [response]) :: Maybe Value))
 
-    --print result
-
-formatRepo :: Github.Repo -> String
-formatRepo r =
-  let fields = [ ("Name", Github.repoName)
-                 ,("URL",  Github.repoHtmlUrl)
-                 ,("Description", orEmpty . Github.repoDescription)
-                 ,("Created-At", formatDate . Github.repoCreatedAt)
-                 ,("Pushed-At", formatMaybeDate . Github.repoPushedAt)
-               ]
-  in intercalate "\n" $ map fmt fields
-    where fmt (s,f) = fill 12 (s ++ ":") ++ " " ++ f r
-          orEmpty = fromMaybe ""
-          fill n s = s ++ replicate n' ' '
-            where n' = max 0 (n - length s)
-
-
-formatMaybeDate = maybe "???" formatDate
-
-formatDate = show . Github.fromGithubDate
